@@ -53,8 +53,11 @@ from duckduckgo_search import DDGS
 CONFIG_FILE = "config.json"
 MEMORY_FILE = "memory.json"
 BMO_IMAGE_FILE = "current_image.jpg"
-WAKE_WORD_MODEL = "/home/powerbart/be-more-agent/venv/lib/python3.13/site-packages/openwakeword/resources/models/alexa_v0.1.onnx"
-WAKE_WORD_THRESHOLD = 0.35
+# TODO: Train a custom "Computer" wake word model at:
+# https://github.com/dscripka/openWakeWord#custom-wake-words
+# For now using hey_jarvis as placeholder
+WAKE_WORD_MODEL = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models", "hey_jarvis_v0.1.onnx")
+WAKE_WORD_THRESHOLD = 0.3
 
 # HARDWARE SETTINGS
 INPUT_DEVICE_NAME = None
@@ -590,7 +593,7 @@ class BotGUI:
                     self.set_state(BotStates.IDLE, "Resetting...")
                     continue
 
-                self.set_state(BotStates.LISTENING, "I'm listening!")
+                self.set_state(BotStates.LISTENING, "Voice input active. Awaiting orders.")
                 
                 audio_file = None
                 if trigger_source == "PTT":
@@ -623,9 +626,10 @@ class BotGUI:
             print(f"Failed to load {TEXT_MODEL}: {e}", flush=True)
         self.play_sound(self.get_random_sound(greeting_sounds_dir))
         print("Models loaded.", flush=True)
+        print("[STARFLEET] Wake word active. Say 'Computer' to activate.", flush=True)
 
     def detect_wake_word_or_ptt(self):
-        self.set_state(BotStates.IDLE, "Waiting...")
+        self.set_state(BotStates.IDLE, "Say: COMPUTER")
         self.ptt_event.clear()
         
         if self.oww_model: self.oww_model.reset()
