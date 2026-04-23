@@ -207,7 +207,7 @@ class BotGUI:
 
     def __init__(self, master):
         self.master = master
-        master.title("Pi Assistant")
+        master.title("LCARS — Starfleet Computer Interface")
         master.attributes('-fullscreen', True) 
         master.bind('<Escape>', self.exit_fullscreen)
         
@@ -266,7 +266,7 @@ class BotGUI:
         self.overlay_label.bind('<Button-1>', self.toggle_hud_visibility)
         
         self.response_text = tk.Text(master, height=12, width=65, wrap=tk.WORD, 
-                                     state=tk.DISABLED, bg="#000000", fg="#ffffff", font=('Courier', 14, 'bold'),
+                                     state=tk.DISABLED, bg="#000000", fg="#CCCCFF", font=('Courier', 14, 'bold'),
                                      bd=0, highlightthickness=0)
         
         self.exit_button = ttk.Button(master, text="Exit & Save", command=self.safe_exit)
@@ -886,7 +886,7 @@ class BotGUI:
             return
 
         model_to_use = VISION_MODEL if img_path else TEXT_MODEL
-        self.set_state(BotStates.THINKING, "Thinking...", cam_path=img_path)
+        self.set_state(BotStates.THINKING, "Processing query...", cam_path=img_path)
         
         messages = []
         user_lang_hint = self._detect_lang(text)
@@ -923,7 +923,7 @@ class BotGUI:
 
                 self.thinking_sound_active.clear()
                 if self.current_state != BotStates.SPEAKING:
-                    self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                    self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                     self.append_to_text("BOT: ", newline=False)
 
                 self._stream_to_text(content)
@@ -943,7 +943,7 @@ class BotGUI:
                     if tool_result and tool_result.startswith("CHAT_FALLBACK::"):
                         chat_text = tool_result.split("::", 1)[1]
                         self.thinking_sound_active.clear()
-                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
                         self.append_to_text(chat_text, newline=True)
                         with self.tts_queue_lock: self.tts_queue.append(chat_text)
@@ -964,7 +964,7 @@ class BotGUI:
                         elif user_lang == "es": fallback_text = "No estoy seguro de cómo hacer eso."
                         else: fallback_text = "I am not sure how to do that."
                         self.thinking_sound_active.clear()
-                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
                         self.append_to_text(fallback_text, newline=True)
                         with self.tts_queue_lock: self.tts_queue.append(fallback_text)
@@ -975,7 +975,7 @@ class BotGUI:
                         elif user_lang == "es": fallback_text = "Busqué, pero no encontré noticias sobre eso."
                         else: fallback_text = "I searched, but I couldn't find any news about that."
                         self.thinking_sound_active.clear()
-                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
                         self.append_to_text(fallback_text, newline=True)
                         with self.tts_queue_lock: self.tts_queue.append(fallback_text)
@@ -986,7 +986,7 @@ class BotGUI:
                         elif user_lang == "es": fallback_text = "No puedo conectarme a Internet en este momento."
                         else: fallback_text = "I cannot reach the internet right now."
                         self.thinking_sound_active.clear()
-                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
                         self.append_to_text(fallback_text, newline=True)
                         with self.tts_queue_lock: self.tts_queue.append(fallback_text)
@@ -997,14 +997,14 @@ class BotGUI:
                             {"role": "user", "content": f"RESULT: {tool_result}\nUser Question: {text}"}
                         ]
                         
-                        self.set_state(BotStates.THINKING, "Reading...")
+                        self.set_state(BotStates.THINKING, "Processing query...")
                         self.thinking_sound_active.set()
                         
                         final_resp = ollama.chat(model=model_to_use, messages=summary_prompt, stream=False, options=OLLAMA_OPTIONS)
                         final_text = final_resp['message']['content']
                         
                         self.thinking_sound_active.clear()
-                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.set_state(BotStates.SPEAKING, "Vocal output active...", cam_path=img_path)
                         
                         self.append_to_text("BOT: ", newline=False)
                         self.append_to_text(final_text, newline=True)
@@ -1019,7 +1019,7 @@ class BotGUI:
                 
         except Exception as e:
             print(f"LLM Error: {e}")
-            self.set_state(BotStates.ERROR, "Brain Freeze!")
+            self.set_state(BotStates.ERROR, "System alert!")
 
     def wait_for_tts(self):
         while self.tts_queue or self.tts_active.is_set():
