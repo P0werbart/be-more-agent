@@ -54,7 +54,7 @@ CONFIG_FILE = "config.json"
 MEMORY_FILE = "memory.json"
 BMO_IMAGE_FILE = "current_image.jpg"
 WAKE_WORD_MODEL = "/home/powerbart/be-more-agent/venv/lib/python3.13/site-packages/openwakeword/resources/models/alexa_v0.1.onnx"
-WAKE_WORD_THRESHOLD = 0.5
+WAKE_WORD_THRESHOLD = 0.35
 
 # HARDWARE SETTINGS
 INPUT_DEVICE_NAME = None
@@ -836,10 +836,13 @@ class BotGUI:
         self.set_state(BotStates.THINKING, "Thinking...", cam_path=img_path)
         
         messages = []
+        user_lang_hint = self._detect_lang(text)
+        lang_str = "German" if user_lang_hint == "de" else ("Spanish" if user_lang_hint == "es" else "English")
+        
         if img_path:
-            messages = [{"role": "user", "content": text, "images": [img_path]}]
+            messages = [{"role": "user", "content": f"[Please reply in {lang_str}] {text}", "images": [img_path]}]
         else:
-            user_msg = {"role": "user", "content": text}
+            user_msg = {"role": "user", "content": f"[Please reply in {lang_str}] {text}"}
             messages = self.permanent_memory + self.session_memory + [user_msg]
         
         self.thinking_sound_active.set()
