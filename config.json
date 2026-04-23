@@ -1,4 +1,5 @@
 {
+    "active_persona": "computer",
     "input_device": "jabra",
     "text_model": "llama3.2:1b",
     "camera_enabled": false,
