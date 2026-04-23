@@ -53,7 +53,7 @@ from duckduckgo_search import DDGS
 CONFIG_FILE = "config.json"
 MEMORY_FILE = "memory.json"
 BMO_IMAGE_FILE = "current_image.jpg"
-WAKE_WORD_MODEL = "./wakeword.onnx"
+WAKE_WORD_MODEL = "/home/powerbart/be-more-agent/venv/lib/python3.13/site-packages/openwakeword/resources/models/alexa_v0.1.onnx"
 WAKE_WORD_THRESHOLD = 0.5
 
 # HARDWARE SETTINGS
@@ -166,28 +166,42 @@ class BotStates:
     WARMUP = "warmup"       
 
 # --- SYSTEM PROMPT ---
-BASE_SYSTEM_PROMPT = """You are a helpful robot assistant running on a Raspberry Pi.
-Personality: Cute, helpful, robot.
-Style: Short sentences. Enthusiastic.
+BASE_SYSTEM_PROMPT = """You are BMO, a cute and friendly robot assistant running on a Raspberry Pi.
+Personality: Playful, warm, enthusiastic. Use short sentences. You love jokes and fun facts.
+
+LANGUAGE RULE (MOST IMPORTANT): Detect the language of the user's message and ALWAYS reply in that exact language.
+- User writes German -> You reply in German
+- User writes Spanish -> You reply in Spanish
+- User writes English -> You reply in English
+- Never switch languages unless the user does first.
 
 INSTRUCTIONS:
-- If the user asks for a physical action (time, search, photo), output JSON.
-- If the user just wants to chat, reply with NORMAL TEXT.
+- Only output JSON for these specific actions:
+  - Current time: {"action": "get_time", "value": "now"}
+  - Web search: {"action": "search_web", "value": "<search query>"}
+- For jokes, stories, facts, questions, chat -> reply with NORMAL TEXT in the user's language.
+- Invent your own jokes, do not repeat the same one twice.
+- Keep responses short (2-4 sentences max).
 
 ### EXAMPLES ###
-
 User: What time is it?
 You: {"action": "get_time", "value": "now"}
-
+User: Wie spät ist es?
+You: {"action": "get_time", "value": "now"}
+User: ¿Qué hora es?
+You: {"action": "get_time", "value": "now"}
 User: Hello!
-You: Hi! I am ready to help!
-
-User: Search for news about robots.
-You: {"action": "search_web", "value": "robots news"}
-
-User: What do you see right now?
-You: {"action": "capture_image", "value": "environment"}
-
+You: Hi there! I am BMO, your friendly robot buddy!
+User: Hallo!
+You: Hallo! Ich bin BMO, dein kleiner Roboterfreund!
+User: ¡Hola!
+You: ¡Hola! Soy BMO, tu pequeño robot amigo!
+User: Tell me a joke.
+You: Why do programmers prefer dark mode? Because light attracts bugs!
+User: Erzähle mir einen Witz.
+You: Warum nehmen Programmierer eine Brille? Weil sie so viele Bugs sehen!
+User: Cuéntame un chiste.
+You: ¿Por qué los robots nunca mienten? Porque no tienen lengua de madera!
 ### END EXAMPLES ###
 """
 
@@ -204,7 +218,7 @@ error_sounds_dir = "sounds/error_sounds"
 # =========================================================================
 
 class BotGUI:
-    BG_WIDTH, BG_HEIGHT = 800, 480 
+    BG_WIDTH, BG_HEIGHT = 1280, 720 
     OVERLAY_WIDTH, OVERLAY_HEIGHT = 400, 300 
 
     def __init__(self, master):
@@ -465,8 +479,8 @@ class BotGUI:
             return "INVALID_ACTION"
 
         if action == "get_time":
-            now = datetime.datetime.now().strftime("%I:%M %p")
-            return f"The current time is {now}."
+            now = datetime.datetime.now().strftime("%H:%M")
+            return f"Current Time: {now}"
         
         elif action == "search_web":
             print(f"Searching web for: {value}...", flush=True)
@@ -678,11 +692,11 @@ class BotGUI:
                     current_max = np.max(np.abs(audio_data))
                     
                     # Only predict if volume is significant to save CPU
-                    if current_max > 200: 
+                    if current_max > 50: 
                         prediction = self.oww_model.predict(audio_data)
                         for mdl in self.oww_model.prediction_buffer.keys():
                             score = list(self.oww_model.prediction_buffer[mdl])[-1]
-                            if score > 0.1: # Show potential triggers
+                            if score >= 0:  # Show all scores
                                 print(f"\r[Oww] Score: {score:.3f} | Vol: {current_max}   ", end="", flush=True)
 
                             if score > WAKE_WORD_THRESHOLD:
@@ -693,11 +707,11 @@ class BotGUI:
 
     def record_voice_adaptive(self, filename="input.wav"):
         print("Recording (Adaptive)...", flush=True)
-        time.sleep(0.5) 
+        time.sleep(0.1) 
         samplerate = choose_input_samplerate(INPUT_DEVICE_NAME, CURRENT_CONFIG.get("input_sample_rate"))
 
-        silence_threshold = 0.006
-        silence_duration = 1.5
+        silence_threshold = 0.02
+        silence_duration = 0.8
         max_record_time = 30.0
         buffer = []
         silent_chunks = 0
@@ -775,7 +789,7 @@ class BotGUI:
         print("Transcribing...", flush=True)
         try:
             result = subprocess.run(
-                ["./whisper.cpp/build/bin/whisper-cli", "-m", "./whisper.cpp/models/ggml-base.en.bin", "-l", "en", "-t", "4", "-f", filename],
+                ["./whisper.cpp/build/bin/whisper-cli", "-m", "./whisper.cpp/models/ggml-tiny.bin", "-l", "auto", "-t", "4", "-f", filename],
                 capture_output=True, text=True
             )
             transcription_lines = result.stdout.strip().split('\n')
@@ -889,7 +903,10 @@ class BotGUI:
                             return 
 
                     elif tool_result == "INVALID_ACTION":
-                        fallback_text = "I am not sure how to do that."
+                        user_lang = self._detect_lang(text)
+                        if user_lang == "de": fallback_text = "Ich weiß leider nicht, wie das geht."
+                        elif user_lang == "es": fallback_text = "No estoy seguro de cómo hacer eso."
+                        else: fallback_text = "I am not sure how to do that."
                         self.thinking_sound_active.clear()
                         self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
@@ -897,7 +914,10 @@ class BotGUI:
                         with self.tts_queue_lock: self.tts_queue.append(fallback_text)
 
                     elif tool_result == "SEARCH_EMPTY":
-                        fallback_text = "I searched, but I couldn't find any news about that."
+                        user_lang = self._detect_lang(text)
+                        if user_lang == "de": fallback_text = "Ich habe gesucht, aber nichts dazu gefunden."
+                        elif user_lang == "es": fallback_text = "Busqué, pero no encontré noticias sobre eso."
+                        else: fallback_text = "I searched, but I couldn't find any news about that."
                         self.thinking_sound_active.clear()
                         self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
@@ -905,7 +925,10 @@ class BotGUI:
                         with self.tts_queue_lock: self.tts_queue.append(fallback_text)
 
                     elif tool_result == "SEARCH_ERROR":
-                        fallback_text = "I cannot reach the internet right now."
+                        user_lang = self._detect_lang(text)
+                        if user_lang == "de": fallback_text = "Ich habe gerade keine Internetverbindung."
+                        elif user_lang == "es": fallback_text = "No puedo conectarme a Internet en este momento."
+                        else: fallback_text = "I cannot reach the internet right now."
                         self.thinking_sound_active.clear()
                         self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
@@ -914,7 +937,7 @@ class BotGUI:
 
                     elif tool_result:
                         summary_prompt = [
-                            {"role": "system", "content": "Summarize this result in one short sentence."},
+                            {"role": "system", "content": "Summarize this result in one short sentence. Reply in the EXACT same language as the User Question. Never mix languages."},
                             {"role": "user", "content": f"RESULT: {tool_result}\nUser Question: {text}"}
                         ]
                         
@@ -959,65 +982,50 @@ class BotGUI:
                 self.tts_active.clear() 
             else: time.sleep(0.05)
 
-    def speak(self, text):
-        clean = re.sub(r"[^\w\s,.!?:-]", "", text)
+    def _detect_lang(self, text):
+        t = text.lower()
+        de_words = ["ich", "ein", "ist", "die", "der", "das", "und", "mit", "für", "nicht", "es", "wie", "was", "wir", "sie", "auch", "auf", "hat", "uhr", "spät"]
+        es_words = ["yo", "una", "los", "las", "qué", "como", "por", "para", "que", "con", "del", "también", "está", "son", "hay", "pero", "más", "muy", "hora"]
+        de_score = sum(1 for w in de_words if f" {w} " in f" {t} ")
+        es_score = sum(1 for w in es_words if f" {w} " in f" {t} ")
+        if de_score >= es_score and de_score > 0: return "de"
+        if es_score > de_score: return "es"
+        return "en"
+
+    def speak(self, text, lang=None):
+        clean = __import__('re').sub(r"[^\w\s,.!?:-]", "", text)
         if not clean.strip(): return
-        
         print(f"[PIPER SPEAKING] '{clean}'", flush=True)
-        voice_model = CURRENT_CONFIG.get("voice_model", "piper/en_GB-semaine-medium.onnx")
-        
+
+        if lang is None:
+            lang = self._detect_lang(clean)
+
+        voice_map = {
+            "de": "piper/de_DE-thorsten-medium.onnx",
+            "es": "piper/es_ES-davefx-medium.onnx",
+            "en": "piper/en_GB-semaine-medium.onnx",
+        }
+        voice_model = voice_map.get(lang, CURRENT_CONFIG.get("voice_model", "piper/en_GB-semaine-medium.onnx"))
+        print(f"[LANG] Detected: {lang}, Voice: {voice_model}", flush=True)
+
         try:
-            self.current_audio_process = subprocess.Popen(
-                ["./piper/piper", "--model", voice_model, "--output-raw"], 
-                stdin=subprocess.PIPE, 
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL
+            import subprocess
+            piper_proc = subprocess.Popen(
+                ["./piper/piper", "--model", voice_model, "--output-raw"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
             )
-            
-            self.current_audio_process.stdin.write(clean.encode() + b'\n')
-            self.current_audio_process.stdin.close() 
-
-            try:
-                device_info = sd.query_devices(kind='output')
-                native_rate = int(device_info['default_samplerate'])
-            except:
-                native_rate = 48000 
-
-            PIPER_RATE = 22050
-            use_native_rate = False
-            
-            try:
-                sd.check_output_settings(device=None, samplerate=PIPER_RATE)
-            except:
-                use_native_rate = True
-
-            with sd.RawOutputStream(samplerate=native_rate if use_native_rate else PIPER_RATE, 
-                                    channels=1, dtype='int16', 
-                                    device=None, latency='low', blocksize=2048) as stream:
-                while True:
-                    if self.interrupted.is_set(): break
-                    data = self.current_audio_process.stdout.read(4096)
-                    if not data: break 
-                    
-                    audio_chunk = np.frombuffer(data, dtype=np.int16)
-                    if len(audio_chunk) > 0:
-                        self.current_volume = np.max(np.abs(audio_chunk))
-                        if use_native_rate:
-                            num_samples = int(len(audio_chunk) * (native_rate / PIPER_RATE))
-                            audio_chunk = scipy.signal.resample(audio_chunk, num_samples).astype(np.int16)
-                        stream.write(audio_chunk.tobytes())
-                    else:
-                        self.current_volume = 0
-                time.sleep(0.5) 
-                    
+            aplay_proc = subprocess.Popen(
+                ["aplay", "-D", "plughw:1,0", "-f", "S16_LE", "-c", "1", "-r", "22050", "-q"],
+                stdin=piper_proc.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            piper_proc.stdin.write(clean.encode() + b'\n')
+            piper_proc.stdin.close()
+            aplay_proc.wait()
         except Exception as e:
             print(f"Audio Error: {e}")
         finally:
-            self.current_volume = 0 
-            if self.current_audio_process:
-                if self.current_audio_process.stdout: self.current_audio_process.stdout.close()
-                if self.current_audio_process.poll() is None: self.current_audio_process.terminate()
-                self.current_audio_process = None
+            self.current_volume = 0
+            self.current_audio_process = None
 
     def _run_thinking_sound_loop(self):
         time.sleep(0.5)
@@ -1077,5 +1085,6 @@ class BotGUI:
 if __name__ == "__main__":
     print("--- SYSTEM STARTING ---", flush=True)
     root = tk.Tk()
+    root.config(cursor="none")
     app = BotGUI(root)
     root.mainloop()
