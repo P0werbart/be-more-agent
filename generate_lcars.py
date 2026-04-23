@@ -1,187 +1,186 @@
+# pip install Pillow
+
 import os
 import math
 import random
 from PIL import Image, ImageDraw, ImageFont
 
-WIDTH = 1280
-HEIGHT = 720
-BG_COLOR = (0, 0, 0)
+def create_rounded_rect(draw, xy, radius, fill):
+    x1, y1, x2, y2 = xy
+    draw.rectangle([x1+radius, y1, x2-radius, y2], fill=fill)
+    draw.rectangle([x1, y1+radius, x2, y2-radius], fill=fill)
+    draw.pieslice([x1, y1, x1+radius*2, y1+radius*2], 180, 270, fill=fill)
+    draw.pieslice([x2-radius*2, y1, x2, y1+radius*2], 270, 360, fill=fill)
+    draw.pieslice([x1, y2-radius*2, x1+radius*2, y2], 90, 180, fill=fill)
+    draw.pieslice([x2-radius*2, y2-radius*2, x2, y2], 0, 90, fill=fill)
 
-# TNG Authentic LCARS Colors
-PEACH = (255, 153, 102)
-ORANGE = (255, 153, 0)
-LAVENDER = (204, 153, 255)
-LIGHT_BLUE = (153, 204, 255)
-PINK = (255, 102, 153)
-RED = (204, 0, 0)
-YELLOW = (255, 204, 0)
-
-def get_base_colors(state):
-    if state == "error": return RED, RED, RED, YELLOW
-    if state == "warmup": return YELLOW, PEACH, ORANGE, LAVENDER
-    return PEACH, ORANGE, LAVENDER, LIGHT_BLUE
-
-def draw_lcars_elbow(draw, state):
-    c1, c2, c3, c4 = get_base_colors(state)
+def generate_frames():
+    output_base = "faces_computer"
+    states = ["idle", "listening", "thinking", "speaking", "error", "warmup", "capturing"]
     
-    # Left main Elbow
-    # Outer rectangle
-    draw.rounded_rectangle([40, 40, 400, HEIGHT - 40], radius=40, fill=c1)
-    # Inner cut-out to make the elbow shape (this cuts out the center leaving the L shape)
-    draw.rounded_rectangle([180, 120, 1280, HEIGHT - 100], radius=40, fill=BG_COLOR)
-    # Ensure the right side of the inner cut-out is completely flat so the bottom bar extends
-    draw.rectangle([180, 120, 1280, HEIGHT - 100], fill=BG_COLOR)
-    # Re-draw the inner round corner specifically
-    draw.rounded_rectangle([180, 120, 300, 240], radius=40, fill=BG_COLOR)
+    for state in states:
+        os.makedirs(os.path.join(output_base, state), exist_ok=True)
+        
+    width, height = 1280, 720
     
-    # Right side blocks (Top bar extension)
-    draw.rounded_rectangle([420, 40, 700, 100], radius=30, fill=c2)
-    draw.rounded_rectangle([720, 40, 1000, 100], radius=30, fill=c3)
-    draw.rounded_rectangle([1020, 40, 1240, 100], radius=30, fill=c4)
-    
-    # Right side blocks (Bottom bar extension)
-    draw.rounded_rectangle([420, HEIGHT - 80, 600, HEIGHT - 40], radius=20, fill=c2)
-    draw.rounded_rectangle([620, HEIGHT - 80, 900, HEIGHT - 40], radius=20, fill=c3)
-    draw.rounded_rectangle([920, HEIGHT - 80, 1240, HEIGHT - 40], radius=20, fill=c1)
-    
-    # Left sidebar split blocks (cutting the elbow)
-    # We cut the elbow with black lines
-    draw.rectangle([40, 160, 180, 170], fill=BG_COLOR)
-    draw.rectangle([40, 240, 180, 250], fill=BG_COLOR)
-    draw.rectangle([40, 320, 180, 330], fill=BG_COLOR)
-    draw.rectangle([40, 500, 180, 510], fill=BG_COLOR)
-    
-    # Fill the cut parts with different colors
-    draw.rectangle([40, 170, 180, 240], fill=c3)
-    draw.rectangle([40, 250, 180, 320], fill=c4)
-    draw.rectangle([40, 510, 180, HEIGHT - 100], fill=c2)
-    
-    # Bottom Left corner rounding fix
-    draw.rounded_rectangle([40, HEIGHT - 100, 180, HEIGHT - 40], radius=40, fill=c1)
-    draw.rectangle([40, HEIGHT - 100, 180, HEIGHT - 60], fill=c1)
-
-def draw_data_blocks(draw, state):
-    c1, c2, c3, c4 = get_base_colors(state)
-    colors = [c1, c2, c3, c4, PINK]
-    
+    # Try to load a font, fallback to default
     try:
-        import platform
-        if platform.system() == "Windows":
-            font = ImageFont.truetype("arialbd.ttf", 20)
-            font_title = ImageFont.truetype("arialbd.ttf", 34)
-            font_small = ImageFont.truetype("arial.ttf", 16)
-        else:
-            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 20)
-            font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 34)
-            font_small = ImageFont.truetype("DejaVuSans.ttf", 16)
-    except:
-        font = ImageFont.load_default()
-        font_title = ImageFont.load_default()
-        font_small = ImageFont.load_default()
-
-    # Title Texts (Black on Colored Bars)
-    draw.text((200, 55), "AUDIO ANALYSIS", fill=BG_COLOR, font=font_title)
-    draw.text((800, 55), "SYSTEM", fill=BG_COLOR, font=font_title)
-    draw.text((1060, 55), "STATUS", fill=BG_COLOR, font=font_title)
-    
-    # Top Right Grid Data (Dense numbers)
-    random.seed(42) # Consistent random numbers
-    for row in range(5):
-        for col in range(3):
-            x = 950 + col * 90
-            y = 150 + row * 25
-            val = f"{random.randint(10, 999)}.{random.randint(1,9)}"
-            draw.text((x, y), val, fill=random.choice(colors), font=font)
-            
-    # Small decorative graph top left
-    for i in range(15):
-        h = random.randint(5, 30)
-        draw.rectangle([220 + i*15, 180 - h, 230 + i*15, 180], fill=c4)
+        font_large = ImageFont.truetype("arial.ttf", 60)
+        font_med = ImageFont.truetype("arial.ttf", 30)
+        font_small = ImageFont.truetype("arial.ttf", 16)
+        font_warmup = ImageFont.truetype("arial.ttf", 24)
+    except IOError:
+        font_large = font_med = font_small = font_warmup = ImageFont.load_default()
         
-    # Bottom Right Data
-    for row in range(4):
-        x = 950
-        y = 480 + row * 30
-        draw.rectangle([x, y+5, x+40, y+15], fill=random.choice(colors))
-        draw.text((x + 50, y), f"SEC {random.randint(1000, 9999)}", fill=c2, font=font)
-
-    # Some textual lines
-    for i in range(5):
-        y = 520 + i * 20
-        draw.text((220, y), f"PARAMETER {i+1}   ...................................   {random.randint(10,99)}%", fill=c3, font=font_small)
-
-def draw_waveform_mirrored(draw, state, frame=0):
-    c1, c2, c3, c4 = get_base_colors(state)
-    colors = [c1, c2, c3, c4, PINK]
-    
-    center_y = 340
-    start_x = 220
-    end_x = 900
-    bar_width = 6
-    spacing = 4
-    
-    num_bars = (end_x - start_x) // (bar_width + spacing)
-    
-    for i in range(num_bars):
-        x = start_x + i * (bar_width + spacing)
-        
-        color = colors[i % len(colors)]
-        if state == "error": color = RED
-            
-        if state == "idle":
-            amp = 5
-        elif state == "listening":
-            amp = 15 + 10 * math.sin(i * 0.2 + frame * 0.8)
-        elif state == "thinking":
-            amp = 50 if (i - frame*2) % 12 < 6 else 5
-        elif state == "speaking":
-            # Very complex high-res wave
-            base = 120 * math.sin(i * 0.3 + frame * 1.5)
-            high = 80 * math.sin(i * 1.1 - frame * 2.1)
-            mid = 50 * math.sin(i * 0.7 + frame * 0.5)
-            envelope = math.sin(math.pi * i / num_bars)
-            amp = abs(base + high + mid) * envelope + 10
-        elif state == "warmup":
-            progress = frame / 5.0
-            if i / num_bars < progress:
-                amp = 80 * math.sin(i * 0.5) + 20
-            else:
-                amp = 5
-        elif state == "error":
-            amp = 80 if (i + frame) % 2 == 0 else 5
-        else:
-            amp = 5
-            
-        amp = max(2, min(160, amp))
-        
-        # Draw top and bottom parts of the wave with a gap in the middle
-        draw.rectangle([x, center_y - amp, x + bar_width, center_y - 2], fill=color)
-        draw.rectangle([x, center_y + 2, x + bar_width, center_y + amp], fill=color)
-
-def generate_state(state, num_frames):
-    out_dir = f"faces_computer/{state}"
-    os.makedirs(out_dir, exist_ok=True)
-    
-    for f in os.listdir(out_dir):
-        if f.endswith(".png"):
-            os.remove(os.path.join(out_dir, f))
-            
-    for f in range(num_frames):
-        img = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
+    for frame in range(1, 7):
+        # --- IDLE ---
+        img = Image.new("RGB", (width, height), "black")
         draw = ImageDraw.Draw(img)
         
-        draw_lcars_elbow(draw, state)
-        draw_data_blocks(draw, state)
-        draw_waveform_mirrored(draw, state, f)
+        # Sidebar Base Logic
+        def draw_layout(draw, sidebar_color, frame_num, top_color, is_idle=False):
+            # Top bar
+            draw.rectangle([0, 0, width, 20], fill=top_color)
+            # Bottom bar
+            draw.rectangle([0, height-12, width, height], fill="#9999FF") # Blue
+            
+            # Left sidebar
+            gap = 8
+            w = 80
+            y = 40
+            h1, h2, h3 = 60, 120, 60
+            
+            c1 = c2 = c3 = sidebar_color
+            if is_idle:
+                shade_shift = "#CC7700" if frame_num % 3 == 0 else sidebar_color
+                if frame_num % 3 == 0: c1 = shade_shift
+                elif frame_num % 3 == 1: c2 = shade_shift
+                else: c3 = shade_shift
+                
+            create_rounded_rect(draw, [20, y, 20+w, y+h1], 15, fill=c1)
+            y += h1 + gap
+            create_rounded_rect(draw, [20, y, 20+w, y+h2], 15, fill=c2)
+            y += h2 + gap
+            create_rounded_rect(draw, [20, y, 20+w, y+h3], 15, fill=c3)
+            
+            # Stardate
+            draw.text((width - 200, 30), "STARDATE 2401.15", fill="white", font=font_small)
+            
+        # IDLE Frame
+        draw_layout(draw, "#FF9900", frame, "#FF9900", is_idle=True)
+        draw.text((400, 300), "LCARS ONLINE", fill="#9999FF", font=font_large)
+        draw.text((400, 380), "AWAITING INPUT", fill="#FF9900", font=font_small)
+        img.save(os.path.join(output_base, "idle", f"frame_{frame:03d}.png"))
         
-        img.save(os.path.join(out_dir, f"{f+1}.png"))
-        print(f"Generated {state} frame {f+1}")
+        # --- LISTENING ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        draw_layout(draw, "#FF9900", frame, "#FF9900")
+        draw.text((350, 300), "VOICE INPUT ACTIVE", fill="#FF9900", font=font_large)
+        
+        # Waveform bars
+        bar_w = 40
+        bar_gap = 20
+        start_x = 450
+        y_base = 450
+        for i in range(4):
+            bar_h = random.randint(20, 100)
+            draw.rectangle([start_x, y_base-bar_h, start_x+bar_w, y_base], fill="#FF9900")
+            start_x += bar_w + bar_gap
+        img.save(os.path.join(output_base, "listening", f"frame_{frame:03d}.png"))
 
-if __name__ == "__main__":
-    generate_state("idle", 1)
-    generate_state("listening", 10)
-    generate_state("thinking", 10)
-    generate_state("speaking", 15)
-    generate_state("error", 2)
-    generate_state("warmup", 6)
-    print("All enhanced LCARS BOOM images generated successfully.")
+        # --- THINKING ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        # Background Grid
+        grid_alpha = 50 + (frame % 3) * 50
+        for gx in range(200, width, 50):
+            for gy in range(50, height, 50):
+                draw.rectangle([gx, gy, gx+4, gy+4], fill=(grid_alpha, grid_alpha, grid_alpha))
+                
+        draw_layout(draw, "#CC88FF", frame, "#CC88FF")
+        draw.text((400, 300), "PROCESSING", fill="#CC88FF", font=font_large)
+        
+        dots = ["◆ ◇ ◇", "◇ ◆ ◇", "◇ ◇ ◆"]
+        draw.text((400, 380), dots[frame % 3], fill="#CC88FF", font=font_med)
+        img.save(os.path.join(output_base, "thinking", f"frame_{frame:03d}.png"))
+        
+        # --- SPEAKING ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        draw_layout(draw, "#44FF88", frame, "#44FF88")
+        draw.text((380, 200), "VOCAL OUTPUT", fill="#44FF88", font=font_large)
+        
+        # Spectrum visualizer
+        start_x = 380
+        y_base = 500
+        for i in range(12):
+            bar_h = random.randint(10, 150)
+            draw.rectangle([start_x, y_base-bar_h, start_x+20, y_base], fill="#44FF88")
+            start_x += 30
+        img.save(os.path.join(output_base, "speaking", f"frame_{frame:03d}.png"))
+
+        # --- ERROR ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        # Diagonal warning stripes
+        for sx in range(-height, width, 100):
+            draw.line([(sx, 0), (sx+height, height)], fill="#440000", width=30)
+            
+        draw_layout(draw, "#FF4444", frame, "#FF4444")
+        
+        if frame % 2 == 0:
+            draw.text((400, 300), "SYSTEM ALERT", fill="#FF4444", font=font_large)
+        else:
+            draw.text((400, 300), "SYSTEM ALERT", fill="#880000", font=font_large)
+        img.save(os.path.join(output_base, "error", f"frame_{frame:03d}.png"))
+        
+        # --- CAPTURING ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        draw_layout(draw, "#33CCFF", frame, "#33CCFF")
+        draw.text((350, 200), "VISUAL SENSOR ACTIVE", fill="#33CCFF", font=font_large)
+        
+        # Rotating Crosshair
+        cx, cy = 600, 450
+        r = 100
+        angle = frame * 15
+        import math
+        for a in [0, 90, 180, 270]:
+            rad = math.radians(a + angle)
+            x1 = cx + int(math.cos(rad) * (r-20))
+            y1 = cy + int(math.sin(rad) * (r-20))
+            x2 = cx + int(math.cos(rad) * (r+20))
+            y2 = cy + int(math.sin(rad) * (r+20))
+            draw.line([(x1, y1), (x2, y2)], fill="#33CCFF", width=5)
+        draw.arc([cx-r, cy-r, cx+r, cy+r], 0, 360, fill="#33CCFF", width=2)
+        img.save(os.path.join(output_base, "capturing", f"frame_{frame:03d}.png"))
+        
+        # --- WARMUP ---
+        img = Image.new("RGB", (width, height), "black")
+        draw = ImageDraw.Draw(img)
+        draw_layout(draw, "#FF9900", frame, "#FF9900")
+        
+        lines = [
+            "LCARS BOOT SEQUENCE INITIATED",
+            "LOADING NEURAL MATRIX...",
+            "VOICE RECOGNITION ONLINE",
+            "LANGUAGE MODEL CONNECTED",
+            "ALL SYSTEMS NOMINAL",
+            "COMPUTER READY"
+        ]
+        
+        y_text = 200
+        for i in range(frame):
+            color = "#FF9900" if i == 5 else "#9999FF"
+            draw.text((300, y_text), lines[i], fill=color, font=font_warmup)
+            y_text += 40
+            
+        img.save(os.path.join(output_base, "warmup", f"frame_{frame:03d}.png"))
+
+    print("LCARS frame generation complete.")
+    print(f"Generated 6 frames each for states: {', '.join(states)}")
+    print(f"Output directory: {output_base}")
+
+if __name__ == '__main__':
+    generate_frames()
