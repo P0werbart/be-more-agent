@@ -258,9 +258,9 @@ class BotGUI:
             print(f"[CRITICAL] Model not found: {WAKE_WORD_MODEL}")
 
         # GUI Setup
-        self.canvas = tk.Canvas(master, width=self.BG_WIDTH, height=self.BG_HEIGHT, bg='#000000', highlightthickness=0)
-        self.canvas.place(x=0, y=0)
-        self.canvas.bind('<Button-1>', self.toggle_hud_visibility) 
+        self.background_label = tk.Label(master, bg="black")
+        self.background_label.place(x=0, y=0, width=self.BG_WIDTH, height=self.BG_HEIGHT)
+        self.background_label.bind('<Button-1>', self.toggle_hud_visibility) 
         
         self.overlay_label = tk.Label(master, bg='black')
         self.overlay_label.bind('<Button-1>', self.toggle_hud_visibility)
@@ -270,51 +270,6 @@ class BotGUI:
                                      bd=0, highlightthickness=0)
         
         self.exit_button = ttk.Button(master, text="Exit & Save", command=self.safe_exit)
-
-        # LCARS Elements
-        self.lcars_colors = ['#FF9900', '#9999FF', '#CC88FF']
-        
-        def create_half_pill(x, y, w, h, fill, side="left"):
-            r = h // 2
-            ids = []
-            if side == "left":
-                ids.append(self.canvas.create_oval(x, y, x+h, y+h, fill=fill, outline=""))
-                ids.append(self.canvas.create_rectangle(x+r, y, x+w, y+h, fill=fill, outline=""))
-            else:
-                ids.append(self.canvas.create_oval(x+w-h, y, x+w, y+h, fill=fill, outline=""))
-                ids.append(self.canvas.create_rectangle(x, y, x+w-r, y+h, fill=fill, outline=""))
-            return ids
-
-        # Top Bar
-        create_half_pill(20, 20, 150, 40, '#FF9900', "left")
-        self.canvas.create_rectangle(180, 20, 500, 40, fill='#9999FF', outline="")
-        self.canvas.create_rectangle(510, 20, 600, 40, fill='#CC88FF', outline="")
-        
-        # Left Sidebar (Blocks)
-        self.sidebar_blocks = []
-        y_pos = 70
-        block_heights = [120, 80, 150]
-        for i, bh in enumerate(block_heights):
-            col = self.lcars_colors[i % len(self.lcars_colors)]
-            ids = create_half_pill(20, y_pos, 80, bh, col, "left")
-            self.sidebar_blocks.append(ids)
-            y_pos += bh + 10
-            
-        # Bottom Bar
-        create_half_pill(20, self.BG_HEIGHT - 60, 200, 40, '#FF9900', "left")
-        self.canvas.create_rectangle(230, self.BG_HEIGHT - 60, 600, self.BG_HEIGHT - 40, fill='#9999FF', outline="")
-
-        # Texts
-        self.canvas.create_text(160, 55, text="LCARS", fill="#000000", font=("Courier", 18, "bold"), anchor="se")
-        
-        self.stardate_text = self.canvas.create_text(self.BG_WIDTH - 20, 30, text="STARDATE: 0000.00", fill="#FF9900", font=("Courier", 16, "bold"), anchor="ne")
-        
-        self.state_indicator = self.canvas.create_text(120, 80, text="WARMUP", fill="#9999FF", font=("Courier", 36, "bold"), anchor="nw")
-        
-        self.response_text.place(x=120, y=140)
-
-        # Animation state
-        self.anim_tick = 0
 
         self.load_animations()
         self.update_animation() 
@@ -370,7 +325,7 @@ class BotGUI:
                 self.response_text.place_forget()
                 self.exit_button.place_forget()
             else:
-                self.response_text.place(x=120, y=140)
+                self.response_text.place(x=400, y=360) # Re-adjust coordinates
                 self.exit_button.place(x=10, y=10)
         except tk.TclError: pass
 
@@ -420,56 +375,30 @@ class BotGUI:
                     self.animations[state].append(ImageTk.PhotoImage(blank))
 
     def update_animation(self):
-        self.anim_tick += 1
-        
-        # Update Stardate (e.g. 2401.15)
-        now = datetime.datetime.now()
-        sd = now.year + (now.timetuple().tm_yday / 365.0)
-        self.canvas.itemconfig(self.stardate_text, text=f"STARDATE: {sd:.2f}")
+        frames = self.animations.get(self.current_state, []) or self.animations.get(BotStates.IDLE, [])
+        if not frames:
+            self.master.after(500, self.update_animation)
+            return
 
-        # State-specific LCARS animations
-        state_colors = {
-            BotStates.IDLE: "#9999FF",
-            BotStates.LISTENING: "#FF9900",
-            BotStates.THINKING: "#CC88FF",
-            BotStates.SPEAKING: "#44FF88",
-            BotStates.ERROR: "#FF4444",
-            BotStates.WARMUP: "#9999FF"
-        }
-        base_color = state_colors.get(self.current_state, "#9999FF")
-        
-        if self.current_state == BotStates.LISTENING:
-            if self.anim_tick % 10 < 5:
-                self.canvas.itemconfig(self.state_indicator, fill="#000000")
+        if self.current_state == BotStates.SPEAKING:
+            if len(frames) > 1:
+                self.current_frame_index = random.randint(1, len(frames) - 1)
             else:
-                self.canvas.itemconfig(self.state_indicator, fill=base_color)
-        elif self.current_state == BotStates.THINKING:
-            colors = [base_color, "#AA66DD", "#8844BB", "#AA66DD"]
-            c = colors[self.anim_tick % len(colors)]
-            self.canvas.itemconfig(self.state_indicator, fill=c)
-        elif self.current_state == BotStates.SPEAKING:
-            self.canvas.itemconfig(self.state_indicator, fill=base_color)
-            if self.anim_tick % 2 == 0:
-                random.shuffle(self.lcars_colors)
-                for i, ids in enumerate(self.sidebar_blocks):
-                    col = self.lcars_colors[i % len(self.lcars_colors)]
-                    for item_id in ids:
-                        self.canvas.itemconfig(item_id, fill=col)
+                self.current_frame_index = 0 
         else:
-            self.canvas.itemconfig(self.state_indicator, fill=base_color)
-            for i, ids in enumerate(self.sidebar_blocks):
-                col = self.lcars_colors[i % len(self.lcars_colors)]
-                for item_id in ids:
-                    self.canvas.itemconfig(item_id, fill=col)
-            
-        self.master.after(100, self.update_animation)
+            self.current_frame_index = (self.current_frame_index + 1) % len(frames)
+
+        self.background_label.config(image=frames[self.current_frame_index])
+        
+        speed = 50 if self.current_state == BotStates.SPEAKING else 200
+        self.master.after(speed, self.update_animation)
 
     def set_state(self, state, msg="", cam_path=None):
         def _update():
             if msg: print(f"[STATE] {state.upper()}: {msg}", flush=True)
             if self.current_state != state:
                 self.current_state = state
-                self.canvas.itemconfig(self.state_indicator, text=state.upper())
+                self.current_frame_index = 0
                 
             if cam_path and os.path.exists(cam_path) and state in [BotStates.THINKING, BotStates.SPEAKING]:
                 try:
@@ -1125,7 +1054,7 @@ class BotGUI:
                 num_samples = int(len(audio) * (native_rate / file_sr))
                 audio = scipy.signal.resample(audio, num_samples).astype(np.int16)
 
-            sd.play(audio, playback_rate)
+            sd.play(audio, playback_rate, device=INPUT_DEVICE_NAME)
             sd.wait() 
         except: pass
 
