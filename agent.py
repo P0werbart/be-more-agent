@@ -60,6 +60,7 @@ WAKE_WORD_THRESHOLD = 0.35
 INPUT_DEVICE_NAME = None
 
 DEFAULT_CONFIG = {
+    "active_persona": "computer",
     "text_model": "gemma3:1b",
     "vision_model": "moondream",
     "voice_model": "piper/en_GB-semaine-medium.onnx",
@@ -93,6 +94,25 @@ def load_config():
 CURRENT_CONFIG = load_config()
 TEXT_MODEL = CURRENT_CONFIG["text_model"]
 VISION_MODEL = CURRENT_CONFIG["vision_model"]
+
+def load_persona(persona_name):
+    persona_path = f"personas/{persona_name.lower()}.json"
+    default_persona = {
+        "name": "BMO",
+        "system_prompt": "You are BMO, a cute and friendly robot assistant running on a Raspberry Pi.\nPersonality: Playful, warm, enthusiastic. Use short sentences. You love jokes and fun facts.\n\nLANGUAGE RULE (MOST IMPORTANT): Detect the language of the user's message and ALWAYS reply in that exact language.\n- User writes German -> You reply in German\n- User writes Spanish -> You reply in Spanish\n- User writes English -> You reply in English\n- Never switch languages unless the user does first.\n\nINSTRUCTIONS:\n- Only output JSON for these specific actions:\n  - Current time: {\"action\": \"get_time\", \"value\": \"now\"}\n  - Web search: {\"action\": \"search_web\", \"value\": \"<search query>\"}\n- For jokes, stories, facts, questions, chat -> reply with NORMAL TEXT in the user's language.\n- Invent your own jokes, do not repeat the same one twice.\n- Keep responses short (2-4 sentences max).\n\n### EXAMPLES ###\nUser: What time is it?\nYou: {\"action\": \"get_time\", \"value\": \"now\"}\nUser: Wie spät ist es?\nYou: {\"action\": \"get_time\", \"value\": \"now\"}\nUser: ¿Qué hora es?\nYou: {\"action\": \"get_time\", \"value\": \"now\"}\nUser: Hello!\nYou: Hi there! I am BMO, your friendly robot buddy!\nUser: Hallo!\nYou: Hallo! Ich bin BMO, dein kleiner Roboterfreund!\nUser: ¡Hola!\nYou: ¡Hola! Soy BMO, tu pequeño robot amigo!\nUser: Tell me a joke.\nYou: Why do programmers prefer dark mode? Because light attracts bugs!\nUser: Erzähle mir einen Witz.\nYou: Warum nehmen Programmierer eine Brille? Weil sie so viele Bugs sehen!\nUser: Cuéntame un chiste.\nYou: ¿Por qué los robots nunca mienten? Porque no tienen lengua de madera!\n### END EXAMPLES ###",
+        "faces_dir": "faces",
+        "sounds_dir": "sounds"
+    }
+    if os.path.exists(persona_path):
+        try:
+            with open(persona_path, "r") as f:
+                user_persona = json.load(f)
+                default_persona.update(user_persona)
+        except Exception as e:
+            print(f"Persona Load Error: {e}. Using default BMO.")
+    return default_persona
+
+CURRENT_PERSONA = load_persona(CURRENT_CONFIG.get("active_persona", "bmo"))
 
 def resolve_input_device(config):
     requested = config.get("input_device")
@@ -166,52 +186,13 @@ class BotStates:
     WARMUP = "warmup"       
 
 # --- SYSTEM PROMPT ---
-BASE_SYSTEM_PROMPT = """You are BMO, a cute and friendly robot assistant running on a Raspberry Pi.
-Personality: Playful, warm, enthusiastic. Use short sentences. You love jokes and fun facts.
-
-LANGUAGE RULE (MOST IMPORTANT): Detect the language of the user's message and ALWAYS reply in that exact language.
-- User writes German -> You reply in German
-- User writes Spanish -> You reply in Spanish
-- User writes English -> You reply in English
-- Never switch languages unless the user does first.
-
-INSTRUCTIONS:
-- Only output JSON for these specific actions:
-  - Current time: {"action": "get_time", "value": "now"}
-  - Web search: {"action": "search_web", "value": "<search query>"}
-- For jokes, stories, facts, questions, chat -> reply with NORMAL TEXT in the user's language.
-- Invent your own jokes, do not repeat the same one twice.
-- Keep responses short (2-4 sentences max).
-
-### EXAMPLES ###
-User: What time is it?
-You: {"action": "get_time", "value": "now"}
-User: Wie spät ist es?
-You: {"action": "get_time", "value": "now"}
-User: ¿Qué hora es?
-You: {"action": "get_time", "value": "now"}
-User: Hello!
-You: Hi there! I am BMO, your friendly robot buddy!
-User: Hallo!
-You: Hallo! Ich bin BMO, dein kleiner Roboterfreund!
-User: ¡Hola!
-You: ¡Hola! Soy BMO, tu pequeño robot amigo!
-User: Tell me a joke.
-You: Why do programmers prefer dark mode? Because light attracts bugs!
-User: Erzähle mir einen Witz.
-You: Warum nehmen Programmierer eine Brille? Weil sie so viele Bugs sehen!
-User: Cuéntame un chiste.
-You: ¿Por qué los robots nunca mienten? Porque no tienen lengua de madera!
-### END EXAMPLES ###
-"""
-
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + "\n\n" + CURRENT_CONFIG.get("system_prompt_extras", "")
+SYSTEM_PROMPT = CURRENT_PERSONA["system_prompt"] + "\n\n" + CURRENT_CONFIG.get("system_prompt_extras", "")
 
 # Sound Directories
-greeting_sounds_dir = "sounds/greeting_sounds"
-ack_sounds_dir = "sounds/ack_sounds"
-thinking_sounds_dir = "sounds/thinking_sounds"
-error_sounds_dir = "sounds/error_sounds"
+greeting_sounds_dir = os.path.join(CURRENT_PERSONA.get("sounds_dir", "sounds"), "greeting_sounds")
+ack_sounds_dir = os.path.join(CURRENT_PERSONA.get("sounds_dir", "sounds"), "ack_sounds")
+thinking_sounds_dir = os.path.join(CURRENT_PERSONA.get("sounds_dir", "sounds"), "thinking_sounds")
+error_sounds_dir = os.path.join(CURRENT_PERSONA.get("sounds_dir", "sounds"), "error_sounds")
 
 # =========================================================================
 # 2. GUI CLASS
@@ -376,7 +357,7 @@ class BotGUI:
             self.set_state(BotStates.IDLE, "Interrupted.")
 
     def load_animations(self):
-        base_path = "faces"
+        base_path = CURRENT_PERSONA.get("faces_dir", "faces")
         states = ["idle", "listening", "thinking", "speaking", "error", "capturing", "warmup"] 
         for state in states:
             folder = os.path.join(base_path, state)
@@ -787,9 +768,10 @@ class BotGUI:
 
     def transcribe_audio(self, filename):
         print("Transcribing...", flush=True)
+        whisper_lang = CURRENT_PERSONA.get("whisper_lang", "auto")
         try:
             result = subprocess.run(
-                ["./whisper.cpp/build/bin/whisper-cli", "-m", "./whisper.cpp/models/ggml-tiny.bin", "-l", "auto", "-t", "4", "-f", filename],
+                ["./whisper.cpp/build/bin/whisper-cli", "-m", "./whisper.cpp/models/ggml-tiny.bin", "-l", whisper_lang, "-t", "4", "-f", filename],
                 capture_output=True, text=True
             )
             transcription_lines = result.stdout.strip().split('\n')
@@ -1003,13 +985,18 @@ class BotGUI:
         if lang is None:
             lang = self._detect_lang(clean)
 
-        voice_map = {
-            "de": "piper/de_DE-thorsten-medium.onnx",
-            "es": "piper/es_ES-davefx-medium.onnx",
-            "en": "piper/en_GB-semaine-medium.onnx",
-        }
-        voice_model = voice_map.get(lang, CURRENT_CONFIG.get("voice_model", "piper/en_GB-semaine-medium.onnx"))
-        print(f"[LANG] Detected: {lang}, Voice: {voice_model}", flush=True)
+        enforced_voice = CURRENT_PERSONA.get("enforce_voice_model")
+        if enforced_voice:
+            voice_model = enforced_voice
+            print(f"[LANG] Enforced Voice: {voice_model}", flush=True)
+        else:
+            voice_map = {
+                "de": "piper/de_DE-thorsten-medium.onnx",
+                "es": "piper/es_ES-davefx-medium.onnx",
+                "en": "piper/en_GB-semaine-medium.onnx",
+            }
+            voice_model = voice_map.get(lang, CURRENT_CONFIG.get("voice_model", "piper/en_GB-semaine-medium.onnx"))
+            print(f"[LANG] Detected: {lang}, Voice: {voice_model}", flush=True)
 
         try:
             import subprocess
